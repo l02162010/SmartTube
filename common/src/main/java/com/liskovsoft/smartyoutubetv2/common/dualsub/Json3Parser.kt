@@ -11,7 +11,8 @@ import com.google.gson.JsonParser
  */
 object Json3Parser {
     const val MAX_GAP_MS = 1_500L
-    const val MAX_CHARS = 84
+    /** Display width limit: CJK characters count 2, others 1 (84 Latin chars or 42 CJK chars) */
+    const val MAX_WIDTH = 84
     const val MAX_SPAN_MS = 7_000L
     private const val MIN_CUE_MS = 200L
     private val SENTENCE_END = charArrayOf('.', '?', '!', '。', '？', '！', '…')
@@ -80,43 +81,69 @@ object Json3Parser {
 
     private fun buildSentences(words: List<Word>): List<SubCue> {
         val result = ArrayList<SubCue>()
-        val text = StringBuilder()
-        var cueStart = 0L
-        var cueEnd = 0L
+        val buffer = ArrayList<Word>()
 
-        fun flush() {
-            if (text.isNotEmpty()) {
-                result.add(SubCue(cueStart, maxOf(cueEnd, cueStart + MIN_CUE_MS), text.toString()))
-                text.setLength(0)
+        fun emit(cueWords: List<Word>) {
+            if (cueWords.isNotEmpty()) {
+                val start = cueWords.first().startMs
+                result.add(SubCue(start, maxOf(cueWords.last().endMs, start + MIN_CUE_MS), join(cueWords)))
             }
+        }
+
+        fun fits(cueWords: List<Word>, next: Word): Boolean {
+            if (cueWords.isEmpty()) {
+                return true
+            }
+            return width(join(cueWords + next)) <= MAX_WIDTH && next.endMs - cueWords.first().startMs <= MAX_SPAN_MS
         }
 
         for (word in words) {
-            if (text.isNotEmpty()) {
-                val gap = word.startMs - cueEnd
-                val joined = text.length + separator(text, word.text).length + word.text.length
-                if (gap > MAX_GAP_MS || joined > MAX_CHARS || word.endMs - cueStart > MAX_SPAN_MS) {
-                    flush()
-                }
+            if (buffer.isNotEmpty() && word.startMs - buffer.last().endMs > MAX_GAP_MS) {
+                emit(buffer)
+                buffer.clear()
+            } else if (!fits(buffer, word)) {
+                // Too long: split at the longest pause in the second half rather than right here.
+                // Unpunctuated ASR (Japanese) otherwise gets cut in the middle of a phrase.
+                val split = pauseSplitIndex(buffer)
+                emit(buffer.subList(0, split))
+                val rest = ArrayList(buffer.subList(split, buffer.size))
+                buffer.clear()
+                if (fits(rest, word)) buffer.addAll(rest) else emit(rest)
             }
 
-            if (text.isEmpty()) {
-                cueStart = word.startMs
-            } else {
-                text.append(separator(text, word.text))
-            }
-
-            text.append(word.text)
-            cueEnd = word.endMs
+            buffer.add(word)
 
             if (endsSentence(word.text)) {
-                flush()
+                emit(buffer)
+                buffer.clear()
             }
         }
 
-        flush()
+        emit(buffer)
 
         return result
+    }
+
+    /**
+     * Where to split a too long cue: after the word that lasts longest (a word's end is the next word's start,
+     * so a long word means the speaker paused after it), searched in the second half to keep both parts usable.
+     */
+    private fun pauseSplitIndex(cueWords: List<Word>): Int {
+        if (cueWords.size < 4) {
+            return cueWords.size
+        }
+        return (cueWords.size / 2 until cueWords.size).maxByOrNull { i -> cueWords[i - 1].endMs - cueWords[i - 1].startMs }!!
+    }
+
+    private fun join(cueWords: List<Word>): String {
+        val text = StringBuilder()
+        for (word in cueWords) {
+            if (text.isNotEmpty()) {
+                text.append(separator(text, word.text))
+            }
+            text.append(word.text)
+        }
+        return text.toString()
     }
 
     @JvmStatic
@@ -124,6 +151,17 @@ object Json3Parser {
         val trimmed = word.trimEnd(*TRAILING_CLOSERS)
         return trimmed.isNotEmpty() && trimmed.last() in SENTENCE_END
     }
+
+    @JvmStatic
+    fun width(text: CharSequence): Int {
+        var width = 0
+        for (c in text) {
+            width += if (isCjk(c) || isHangul(c)) 2 else 1
+        }
+        return width
+    }
+
+    private fun isHangul(c: Char) = c in '\uAC00'..'\uD7A3' || c in '\u1100'..'\u11FF' || c in '\u3130'..'\u318F'
 
     /**
      * Words are joined with a space, except next to CJK characters.

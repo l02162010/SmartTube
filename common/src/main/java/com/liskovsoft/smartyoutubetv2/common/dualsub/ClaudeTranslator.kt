@@ -32,8 +32,11 @@ class ClaudeTranslator(
         const val API_VERSION = "2023-06-01"
         const val MODEL_HAIKU = "claude-haiku-5-5"
         const val MODEL_SONNET = "claude-sonnet-5-5"
-        /** Bump it when the prompt changes: the cache file name contains it, so old translations expire. */
-        const val PROMPT_VERSION = 2
+        /**
+         * Bump it when the prompt or the sentence splitting (Json3Parser) changes:
+         * the cache file name contains it, so old cues and translations expire.
+         */
+        const val PROMPT_VERSION = 4
         const val MAX_RETRIES = 4
         const val CONTEXT_LINES = 6
         private const val MAX_TOKENS = 8192
@@ -62,7 +65,14 @@ class ClaudeTranslator(
     """.trimIndent()
 
     private fun scriptRule(): String = when (LangUtil.normalize(targetLanguage)) {
-        "zh-Hant" -> "\nUse Traditional Chinese characters and Taiwan usage only. Never output Simplified Chinese characters."
+        "zh-Hant" -> "\n" + """
+            Write Taiwanese Mandarin (台灣用語) in Traditional Chinese characters. Never use Simplified characters,
+            Hong Kong/Cantonese wording or Mainland China wording. Prefer the Taiwan term, e.g.
+            影片 (not 視頻), 軟體 (not 軟件), 網路 (not 網絡), 資訊 (not 信息), 品質 (not 質量), 程式 (not 程序),
+            計程車 (not 的士/出租車), 公車 (not 巴士/公交), 簡訊 (not 短信), 部落格 (not 博客), 冰淇淋 (not 雪糕),
+            馬鈴薯 (not 土豆/薯仔), 鳳梨 (not 菠蘿), 滑鼠 (not 鼠標), 隨身碟 (not U盤), 早安 (not 早晨).
+            Never use Cantonese words such as 嘅, 咗, 唔, 嘢, 啲, 冇.
+        """.trimIndent().replace("\n", " ")
         "zh-Hans" -> "\nUse Simplified Chinese characters only."
         else -> ""
     }
@@ -195,6 +205,9 @@ class ClaudeTranslator(
         if (LangUtil.normalize(targetLanguage) == "zh-Hant") {
             lines.firstOrNull { LangUtil.hasSimplifiedOnlyChars(it) }?.let {
                 throw BadOutputException("Simplified Chinese in a Traditional translation: $it")
+            }
+            lines.firstOrNull { LangUtil.hasCantoneseChars(it) }?.let {
+                throw BadOutputException("Cantonese in a Taiwanese translation: $it")
             }
         }
 

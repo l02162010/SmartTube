@@ -106,17 +106,23 @@ class DualSubtitleController : BasePlayerController() {
         }
 
         // No original subs: leave ExoPlayer subtitles alone
-        val track = TrackPicker.pick(tracks, data.sourceLang)
+        val track = TrackPicker.pick(tracks, data.sourceLang, video.originalAudioLanguage, data.targetLang)
         if (track == null) {
             Log.d(TAG, "Dual subs: no original track among %s", tracks.map { it.languageCode + if (it.isAuto) "(auto)" else "" })
             return
         }
 
-        val needsTranslation = !LangUtil.isSame(track.languageCode, data.targetLang)
-        val humanTrack = if (needsTranslation && data.isPreferHumanTranslation) {
+        // Original already in the viewer's language (any Chinese script counts): nothing to add,
+        // leave subtitles to SmartTube so the user's own on/off choice applies
+        if (LangUtil.isSameLanguage(track.languageCode, data.targetLang)) {
+            Log.d(TAG, "Dual subs: original %s is already readable as %s, skipping", track.languageCode, data.targetLang)
+            return
+        }
+
+        val humanTrack = if (data.isPreferHumanTranslation) {
             TrackPicker.pickHumanTranslation(tracks, data.targetLang)
         } else null
-        val useAi = needsTranslation && humanTrack == null
+        val useAi = humanTrack == null
         val translator = if (useAi) ClaudeTranslator(http, data.apiKey, data.model, data.targetLang) else null
         val cacheName = if (useAi) {
             TranslationCache.fileName(video.videoId, track.languageCode, data.targetLang, data.model)
@@ -126,8 +132,9 @@ class DualSubtitleController : BasePlayerController() {
             MessageHelpers.showMessage(context, R.string.dualsub_using_human)
         }
 
-        Log.d(TAG, "Dual subs track: %s auto=%s translate=%s human=%s (all: %s)", track.languageCode, track.isAuto, needsTranslation,
+        Log.d(TAG, "Dual subs track: %s auto=%s ai=%s human=%s audio=%s (all: %s)", track.languageCode, track.isAuto, useAi,
             humanTrack?.languageCode,
+            video.originalAudioLanguage,
             tracks.map { it.languageCode + if (it.isAuto) "(auto)" else "" })
 
         lateinit var newSession: DualSubSession

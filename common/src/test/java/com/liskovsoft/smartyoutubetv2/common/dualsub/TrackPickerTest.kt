@@ -22,6 +22,13 @@ class TrackPickerTest {
         assertTrue(LangUtil.isSame("zh", "zh-Hans"))
         assertFalse(LangUtil.isSame("zh-TW", "zh-CN"))
         assertFalse(LangUtil.isSame("", ""))
+
+        // Readable without translation: any Chinese script, any region
+        assertTrue(LangUtil.isSameLanguage("zh-CN", "zh-Hant"))
+        assertTrue(LangUtil.isSameLanguage("zh-TW", "zh-Hant"))
+        assertTrue(LangUtil.isSameLanguage("en-GB", "en"))
+        assertFalse(LangUtil.isSameLanguage("ja", "zh-Hant"))
+        assertFalse(LangUtil.isSameLanguage("", ""))
     }
 
     @Test
@@ -41,8 +48,9 @@ class TrackPickerTest {
     }
 
     @Test
-    fun firstManualWithoutAuto() {
-        assertEquals(jaManual, TrackPicker.pick(listOf(jaManual, enManual), null))
+    fun englishBeforeOtherManualWithoutAuto() {
+        assertEquals(enManual, TrackPicker.pick(listOf(jaManual, enManual), null))
+        assertEquals(jaManual, TrackPicker.pick(listOf(jaManual), null))
     }
 
     @Test
@@ -51,6 +59,37 @@ class TrackPickerTest {
         assertEquals(enManual, TrackPicker.pick(listOf(enAuto, enManual), "en"))
         // Not available: falls back to auto rules
         assertEquals(enManual, TrackPicker.pick(listOf(enAuto, enManual), "ko"))
+    }
+
+    @Test
+    fun originalAudioLanguageWins() {
+        // Chinese cooking video: no real ASR, English translation listed first
+        val enUs = SubTrack("en-US", "$base&lang=en-US", false)
+        val zhHans = SubTrack("zh-Hans", "$base&lang=zh-Hans", false)
+        val zhHant = SubTrack("zh-Hant", "$base&lang=zh-Hant", false)
+        val dubAsr = SubTrack("en", "$base&kind=asr&lang=en&variant=timing-optimized", true)
+        val tracks = listOf(enUs, dubAsr, zhHans, zhHant)
+
+        assertEquals(enUs, TrackPicker.pick(tracks, null)) // old rule: first manual
+        assertEquals(zhHant, TrackPicker.pick(tracks, null, "zh-Hant"))
+        // The user's source setting still wins
+        assertEquals(enUs, TrackPicker.pick(tracks, "en", "zh-Hant"))
+        // Unknown audio language: same as before
+        assertEquals(enUs, TrackPicker.pick(tracks, null, "ko"))
+    }
+
+    @Test
+    fun noAutoTrackAndUnknownAudio() {
+        // Chinese vlog with many uploaded translations, Arabic listed first
+        val ar = SubTrack("ar", "$base&lang=ar", false)
+        val en = SubTrack("en", "$base&lang=en", false)
+        val zhCn = SubTrack("zh-CN", "$base&lang=zh-CN", false)
+
+        // A track the viewer reads wins (the controller then skips dual subs)
+        assertEquals(zhCn, TrackPicker.pick(listOf(ar, en, zhCn), null, null, "zh-Hant"))
+        // Otherwise English rather than whatever comes first
+        assertEquals(en, TrackPicker.pick(listOf(ar, en), null, null, "zh-Hant"))
+        assertEquals(ar, TrackPicker.pick(listOf(ar), null, null, "zh-Hant"))
     }
 
     @Test

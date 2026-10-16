@@ -27,8 +27,24 @@ object LangUtil {
         return base
     }
 
+    /** Written-Cantonese characters that never appear in Taiwanese Mandarin */
+    private const val CANTONESE_ONLY = "嘅咗唔嘢啲冇喺嚟佢哋"
+
+    @JvmStatic
+    fun hasCantoneseChars(text: String): Boolean = text.any { CANTONESE_ONLY.indexOf(it) != -1 }
+
     @JvmStatic
     fun hasSimplifiedOnlyChars(text: String): Boolean = text.any { SIMPLIFIED_ONLY.indexOf(it) != -1 }
+
+    /**
+     * Same language for reading purposes: Chinese scripts count as one language (zh-TW == zh-CN).
+     * Used to skip dual subtitles when the viewer can already read the original.
+     */
+    @JvmStatic
+    fun isSameLanguage(a: String?, b: String?): Boolean {
+        val na = normalize(a).substringBefore('-')
+        return na.isNotEmpty() && na == normalize(b).substringBefore('-')
+    }
 
     @JvmStatic
     fun isSame(a: String?, b: String?): Boolean {

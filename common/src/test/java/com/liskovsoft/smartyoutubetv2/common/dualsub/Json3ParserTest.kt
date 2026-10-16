@@ -55,7 +55,7 @@ class Json3ParserTest {
 
         assertTrue(cues.size > 1)
         cues.forEach { cue ->
-            assertTrue("too long: ${cue.text}", cue.text.length <= Json3Parser.MAX_CHARS)
+            assertTrue("too long: ${cue.text}", Json3Parser.width(cue.text) <= Json3Parser.MAX_WIDTH)
             assertTrue("too wide: $cue", cue.endMs - cue.startMs <= Json3Parser.MAX_SPAN_MS)
         }
         // Nothing lost
@@ -71,6 +71,45 @@ class Json3ParserTest {
         val cues = Json3Parser.parse(json, true)
 
         assertEquals(listOf("今日はいい天気。", "OK go"), cues.map { it.text })
+    }
+
+    @Test
+    fun unpunctuatedJapaneseIsSplitByDisplayWidth() {
+        // Japanese ASR usually has no punctuation: 30 chunks of 3 kana in one 6s run
+        val segs = (0 until 30).joinToString(",") { i -> """{"utf8":"あいう","tOffsetMs":${i * 200}}""" }
+        val json = """{"events":[{"tStartMs":0,"dDurationMs":6000,"segs":[$segs]}]}"""
+
+        val cues = Json3Parser.parse(json, true)
+
+        assertTrue(cues.size >= 3)
+        cues.forEach { assertTrue("too wide: ${it.text}", it.text.length <= Json3Parser.MAX_WIDTH / 2) }
+        assertEquals("あいう".repeat(30), cues.joinToString("") { it.text })
+    }
+
+    @Test
+    fun tooLongCueIsSplitAtThePause() {
+        // 30 kana chunks (width 180); the speaker pauses 800ms after chunk 19 ("あいうです"), others last 150ms
+        var t = 0L
+        val segs = (0 until 30).joinToString(",") { i ->
+            val text = if (i == 19) "あいうです" else "あいう"
+            val seg = """{"utf8":"$text","tOffsetMs":$t}"""
+            t += if (i == 19) 800 else 150
+            seg
+        }
+        val json = """{"events":[{"tStartMs":0,"dDurationMs":$t,"segs":[$segs]}]}"""
+
+        val cues = Json3Parser.parse(json, true)
+
+        assertTrue(cues.any { it.text.endsWith("あいうです") })
+        assertEquals("あいう".repeat(19) + "あいうです" + "あいう".repeat(10), cues.joinToString("") { it.text })
+    }
+
+    @Test
+    fun displayWidth() {
+        assertEquals(5, Json3Parser.width("hello"))
+        assertEquals(6, Json3Parser.width("日本語"))
+        assertEquals(4, Json3Parser.width("한국"))
+        assertEquals(7, Json3Parser.width("OK です"))
     }
 
     @Test

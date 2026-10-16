@@ -76,3 +76,4 @@ hs_err_pid*.log
 .env
 keystore.properties
 *.jks
+.gstack/

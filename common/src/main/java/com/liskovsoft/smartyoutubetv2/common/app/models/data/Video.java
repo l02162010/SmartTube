@@ -13,6 +13,7 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaGroup;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItem;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaSubtitle;
+import com.liskovsoft.smartyoutubetv2.common.dualsub.TrackPicker;
 import com.liskovsoft.mediaserviceinterfaces.data.ItemGroup.Item;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemMetadata;
 import com.liskovsoft.mediaserviceinterfaces.data.NotificationState;
@@ -105,6 +106,7 @@ public final class Video {
     private WeakReference<VideoGroup> group; // Memory leak fix. Used to get next page when scrolling.
     public List<NotificationState> notificationStates;
     public List<MediaSubtitle> subtitles; // MOD: dual subtitles
+    public String originalAudioLanguage; // MOD: dual subtitles
 
     public Video() {
        // NOP
@@ -799,6 +801,7 @@ public final class Video {
         volume = formatInfo.getVolumeLevel();
         isUnplayable = formatInfo.isUnplayable();
         subtitles = formatInfo.getSubtitles(); // MOD: dual subtitles
+        originalAudioLanguage = TrackPicker.originalAudioLanguage(formatInfo.getAdaptiveFormats()); // MOD: dual subtitles
     }
 
     public void sync(DislikeData dislikeData) {

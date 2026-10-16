@@ -123,6 +123,15 @@ class ClaudeTranslatorTest {
             assertTrue(e.message!!.contains("Simplified"))
         }
 
+        // Cantonese wording is rejected for Taiwanese Traditional Chinese
+        try {
+            translator.parseLines("""{"1": "佢哋唔知"}""", 1)
+            fail()
+        } catch (e: BadOutputException) {
+            assertTrue(e.message!!.contains("Cantonese"))
+        }
+        assertEquals(listOf("沒關係"), translator.parseLines("""{"1": "沒關係"}""", 1))
+
         // Fine when Simplified is the target
         val hans = ClaudeTranslator(FakeClaude(), "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hans")
         assertEquals(listOf("为了大局着想"), hans.parseLines("""{"1": "为了大局着想"}""", 1))
