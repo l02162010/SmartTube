@@ -27,6 +27,8 @@ object TrackPicker {
      * 3. Spoken language = [audioLang] (original audio track) or else the ASR track language
      *    (speech recognition always runs on the spoken language).
      * 4. Manual track in the spoken language, else its ASR track.
+     * 5. Spoken language unknown but a single original track (typical uploaded transcript): that one.
+     *    Several tracks can't be told apart from uploaded translations, so nothing.
      */
     @JvmStatic
     @JvmOverloads
@@ -39,7 +41,7 @@ object TrackPicker {
 
         val spoken = audioLang?.takeIf { it.isNotBlank() }
             ?: originals.firstOrNull { it.isAuto }?.languageCode
-            ?: return null
+            ?: return originals.singleOrNull()
 
         return inLanguage(originals, spoken)
     }

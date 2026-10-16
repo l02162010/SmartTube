@@ -52,7 +52,9 @@ class DualSubSessionTest {
         assertTrue(listener.ready.await(5, TimeUnit.SECONDS))
         awaitTrue { (0 until 200).all { session.translation(it) != null } }
 
-        assertTrue(http.requests.any { it[0] == "line120" && it.size == DualSubSession.BATCH_SIZE })
+        // A small batch right at the position first, then full batches
+        assertEquals(listOf("line125") + (126 until 135).map { "line$it" }, http.requests[0])
+        assertTrue(http.requests.any { it.size == DualSubSession.BATCH_SIZE })
         assertEquals("line125-tr", session.translation(125))
         assertEquals("line125", session.original(session.findIndex(125_100)))
         assertTrue(listener.errors.isEmpty())
@@ -66,6 +68,55 @@ class DualSubSessionTest {
         assertTrue(listener2.ready.await(5, TimeUnit.SECONDS))
         assertEquals("line7-tr", session2.translation(7))
         assertTrue(http2.requests.isEmpty())
+    }
+
+    @Test
+    fun resumesWhatWasLeftUntranslated() {
+        val cache = TranslationCache(tmp.root)
+        val name = "resume.json"
+
+        // First visit: batches touching line 60+ fail (e.g. overloaded API): [50,90) and [90,100) stay empty
+        val failing = FakeClaude { _, lines -> if (lines.any { it.removePrefix("line").toInt() >= 60 }) HttpResult(500, "{}") else null }
+            .apply { subtitleBody = manualJson(100) }
+        val first = Waiter()
+        val finished = CountDownLatch(1)
+        DualSubSession(track, failing, ClaudeTranslator(failing, "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hant") {}, cache, name,
+            object : DualSubSession.Listener by first {
+                override fun onFinished(stats: String) = finished.countDown()
+            }).start(0)
+        assertTrue(finished.await(10, TimeUnit.SECONDS))
+        assertEquals(50, cache.read(name)!!.translations.count { it != null })
+
+        // Second visit: only the missing lines are requested
+        val http = FakeClaude()
+        val second = Waiter()
+        val session = DualSubSession(track, http, ClaudeTranslator(http, "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hant"), cache, name, second)
+        session.start(0)
+        awaitTrue { session.isReady && (0 until 100).all { session.translation(it) != null } }
+
+        assertTrue(http.requests.flatten().all { it.removePrefix("line").toInt() >= 50 })
+        assertEquals(50, http.requests.flatten().size)
+        assertEquals("line10-tr", session.translation(10))
+    }
+
+    @Test
+    fun leavingEarlyKeepsWhatIsTranslated() {
+        val cache = TranslationCache(tmp.root)
+        // Only the quick batch at the position answers, everything else hangs until cancel
+        val gate = CountDownLatch(1)
+        val http = FakeClaude { _, lines -> if (lines[0] != "line50") gate.await() ; null }.apply { subtitleBody = manualJson(200) }
+        val listener = Waiter()
+        val session = DualSubSession(track, http, ClaudeTranslator(http, "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hant"), cache, "early.json", listener)
+
+        session.start(50_000)
+        awaitTrue { session.isReady && session.translation(50) != null }
+        session.cancel()
+        gate.countDown()
+
+        awaitTrue { cache.read("early.json") != null }
+        val saved = cache.read("early.json")!!.translations
+        assertEquals("line50-tr", saved[50])
+        assertEquals(DualSubSession.QUICK_BATCH_SIZE, saved.count { it != null })
     }
 
     @Test

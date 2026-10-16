@@ -77,6 +77,8 @@ class TrackPickerTest {
     fun unknownSpokenLanguageGivesNothing() {
         // No ASR and no audio info: any of these could be an uploaded translation
         assertNull(TrackPicker.pick(listOf(jaManual, enManual), null))
+        // ...but a single track is the transcript (e.g. a podcast with uploaded English subs only)
+        assertEquals(enManual, TrackPicker.pick(listOf(enManual), null))
         assertEquals(jaManual, TrackPicker.pick(listOf(jaManual, enManual), null, "ja"))
     }
 
@@ -114,7 +116,7 @@ class TrackPickerTest {
 
         // Never guess
         assertNull(TrackPicker.pick(listOf(ar, en, zhCn), null))
-        assertNull(TrackPicker.pick(listOf(ar), null))
+        assertEquals(ar, TrackPicker.pick(listOf(ar), null)) // single track: used, the script check guards it
         // Known spoken language: its track
         assertEquals(zhCn, TrackPicker.pick(listOf(ar, en, zhCn), null, "zh-CN"))
     }

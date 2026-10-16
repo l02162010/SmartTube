@@ -147,7 +147,12 @@ class DualSubtitleController : BasePlayerController() {
                 !LangUtil.matchesScript(texts, track.languageCode) || LangUtil.isTextReadableAs(texts, targetLang)
             },
             listener = object : DualSubSession.Listener {
-            override fun onCuesReady() = onMain { activate() }
+            override fun onCuesReady() = onMain {
+                Log.d(TAG, "Dual subs loaded: %s", newSession.loadInfo)
+                activate()
+            }
+
+            override fun onFinished(stats: String) = onMain { Log.d(TAG, "Dual subs translated: %s", stats) }
 
             override fun onTranslated() = onMain { render() }
 

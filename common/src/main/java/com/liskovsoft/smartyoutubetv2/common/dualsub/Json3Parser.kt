@@ -1,8 +1,8 @@
 package com.liskovsoft.smartyoutubetv2.common.dualsub
 
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import java.io.StringReader
 
 /**
  * Parses YouTube json3 captions.
@@ -20,43 +20,124 @@ object Json3Parser {
     private val WHITESPACE = Regex("\\s+")
 
     private class Word(val startMs: Long, var endMs: Long, val text: String)
+    private class Seg(val text: String, val offsetMs: Long)
+    private class Event(val startMs: Long, val durationMs: Long, val segs: List<Seg>)
 
     @JvmStatic
     fun parse(json: String, isAuto: Boolean): List<SubCue> {
-        val events = JsonParser().parse(json).asJsonObject.getAsJsonArray("events") ?: return emptyList()
-        val objects = events.mapNotNull { if (it.isJsonObject) it.asJsonObject else null }
-            .filter { it.has("segs") && it.getInt("aAppend") != 1L }
-
-        val cues = if (isAuto) buildSentences(collectWords(objects)) else manualCues(objects)
+        val events = readEvents(json)
+        val cues = if (isAuto) buildSentences(collectWords(events)) else manualCues(events)
 
         return cues.sortedBy { it.startMs }
     }
 
-    private fun manualCues(events: List<JsonObject>): List<SubCue> {
-        return events.mapNotNull { event ->
-            val text = cleanText(event.getAsJsonArray("segs").joinToString("") { it.utf8() })
-            val start = event.getInt("tStartMs") ?: return@mapNotNull null
-            val duration = event.getInt("dDurationMs") ?: 0
+    /**
+     * Streams the file instead of building a JSON tree: a 2-3 hour podcast is a 2.5 MB file,
+     * the tree took seconds and tens of MB on a Chromecast.
+     * Keeps only events with text (skips window definitions and "aAppend" line breaks).
+     */
+    private fun readEvents(json: String): List<Event> {
+        val events = ArrayList<Event>()
+        val reader = JsonReader(StringReader(json))
 
-            if (text.isEmpty()) null else SubCue(start, start + duration, text)
+        reader.beginObject()
+        while (reader.hasNext()) {
+            if (reader.nextName() != "events" || reader.peek() != JsonToken.BEGIN_ARRAY) {
+                reader.skipValue()
+                continue
+            }
+            reader.beginArray()
+            while (reader.hasNext()) {
+                readEvent(reader)?.let { events.add(it) }
+            }
+            reader.endArray()
+        }
+        reader.endObject()
+
+        return events
+    }
+
+    private fun readEvent(reader: JsonReader): Event? {
+        if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+            reader.skipValue()
+            return null
+        }
+
+        var start: Long? = null
+        var duration = 0L
+        var append = false
+        var segs: List<Seg>? = null
+
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "tStartMs" -> start = readLong(reader)
+                "dDurationMs" -> duration = readLong(reader) ?: 0
+                "aAppend" -> append = readLong(reader) == 1L
+                "segs" -> segs = readSegs(reader)
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+
+        return if (start == null || segs == null || append) null else Event(start, duration, segs)
+    }
+
+    private fun readSegs(reader: JsonReader): List<Seg>? {
+        if (reader.peek() != JsonToken.BEGIN_ARRAY) {
+            reader.skipValue()
+            return null
+        }
+
+        val segs = ArrayList<Seg>()
+        reader.beginArray()
+        while (reader.hasNext()) {
+            if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+                reader.skipValue()
+                continue
+            }
+            var text = ""
+            var offset = 0L
+            reader.beginObject()
+            while (reader.hasNext()) {
+                when (reader.nextName()) {
+                    "utf8" -> text = if (reader.peek() == JsonToken.STRING) reader.nextString() else { reader.skipValue(); "" }
+                    "tOffsetMs" -> offset = readLong(reader) ?: 0
+                    else -> reader.skipValue()
+                }
+            }
+            reader.endObject()
+            segs.add(Seg(text, offset))
+        }
+        reader.endArray()
+
+        return segs
+    }
+
+    private fun readLong(reader: JsonReader): Long? {
+        return if (reader.peek() == JsonToken.NUMBER) reader.nextLong() else { reader.skipValue(); null }
+    }
+
+    private fun manualCues(events: List<Event>): List<SubCue> {
+        return events.mapNotNull { event ->
+            val text = cleanText(event.segs.joinToString("") { it.text })
+            if (text.isEmpty()) null else SubCue(event.startMs, event.startMs + event.durationMs, text)
         }
     }
 
-    private fun collectWords(events: List<JsonObject>): List<Word> {
+    private fun collectWords(events: List<Event>): List<Word> {
         val words = ArrayList<Word>()
 
         for (event in events) {
-            val start = event.getInt("tStartMs") ?: continue
-            val eventEnd = start + (event.getInt("dDurationMs") ?: 0)
+            val eventEnd = event.startMs + event.durationMs
             val eventWords = ArrayList<Word>()
 
-            for (seg in event.getAsJsonArray("segs")) {
-                val text = seg.utf8().trim()
+            for (seg in event.segs) {
+                val text = seg.text.trim()
                 if (text.isEmpty()) {
                     continue
                 }
-                val offset = if (seg.isJsonObject) seg.asJsonObject.getInt("tOffsetMs") ?: 0 else 0
-                eventWords.add(Word(start + offset, eventEnd, text))
+                eventWords.add(Word(event.startMs + seg.offsetMs, eventEnd, text))
             }
 
             // A word lasts until the next word of the same event starts
@@ -185,17 +266,4 @@ object Json3Parser {
     }
 
     private fun cleanText(text: String): String = text.replace(WHITESPACE, " ").trim()
-
-    private fun JsonElement.utf8(): String {
-        if (!isJsonObject) {
-            return ""
-        }
-        val value = asJsonObject.get("utf8")
-        return if (value == null || value.isJsonNull) "" else value.asString
-    }
-
-    private fun JsonObject.getInt(name: String): Long? {
-        val value = get(name)
-        return if (value == null || value.isJsonNull) null else value.asLong
-    }
 }

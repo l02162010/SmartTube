@@ -25,6 +25,22 @@ class Json3ParserTest {
     }
 
     @Test
+    fun skipsFieldsItDoesNotUse() {
+        // Shape of a real json3 file: header fields, styles, window events without segs, null values
+        val json = """
+            {"wireMagic":"pb3","pens":[{}],"wsWinStyles":[{},{"mhModeHint":2}],"wpWinPositions":[{},{"apPoint":6}],
+             "events":[
+               {"tStartMs":0,"dDurationMs":5000,"id":1,"wpWinPosId":1,"wsWinStyleId":1},
+               {"tStartMs":100,"dDurationMs":900,"wWinId":1,"segs":[{"utf8":"hi","acAsrConf":0,"pPenId":1},{"utf8":null}]},
+               "garbage",
+               {"tStartMs":1000,"dDurationMs":500,"segs":[{"utf8":"there."}],"extra":{"nested":[1,2,{"a":null}]}}
+             ],"trailer":true}
+        """.trimIndent()
+
+        assertEquals(listOf(SubCue(100, 1000, "hi"), SubCue(1000, 1500, "there.")), Json3Parser.parse(json, false))
+    }
+
+    @Test
     fun autoSubsAreRebuiltIntoSentences() {
         val json = """
             {"events":[
