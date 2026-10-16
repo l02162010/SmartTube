@@ -121,6 +121,13 @@ class Json3ParserTest {
     }
 
     @Test
+    fun cleanText() {
+        assertEquals("a b c", Json3Parser.cleanText("  a \n\n b\t\u3000c  "))
+        assertEquals("", Json3Parser.cleanText(" \n "))
+        assertEquals("你好 世界", Json3Parser.cleanText("你好\n世界"))
+    }
+
+    @Test
     fun displayWidth() {
         assertEquals(5, Json3Parser.width("hello"))
         assertEquals(6, Json3Parser.width("日本語"))

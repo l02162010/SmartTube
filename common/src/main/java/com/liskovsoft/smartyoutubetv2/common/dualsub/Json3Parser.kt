@@ -17,7 +17,6 @@ object Json3Parser {
     private const val MIN_CUE_MS = 200L
     private val SENTENCE_END = charArrayOf('.', '?', '!', '。', '？', '！', '…')
     private val TRAILING_CLOSERS = charArrayOf('"', '\'', '”', '’', ')', ']', '」', '』', '）')
-    private val WHITESPACE = Regex("\\s+")
 
     private class Word(val startMs: Long, var endMs: Long, val text: String)
     private class Seg(val text: String, val offsetMs: Long)
@@ -265,5 +264,23 @@ object Json3Parser {
         }
     }
 
-    private fun cleanText(text: String): String = text.replace(WHITESPACE, " ").trim()
+    /**
+     * Collapses whitespace runs (incl. line breaks) into one space. A plain loop: Regex.replace per cue
+     * was the slowest part of parsing manual subs on a Chromecast (thousands of cues in a long video).
+     */
+    @JvmStatic
+    fun cleanText(text: String): String {
+        val out = StringBuilder(text.length)
+        var pendingSpace = false
+        for (c in text) {
+            if (c.isWhitespace()) {
+                pendingSpace = out.isNotEmpty()
+            } else {
+                if (pendingSpace) out.append(' ')
+                pendingSpace = false
+                out.append(c)
+            }
+        }
+        return out.toString()
+    }
 }

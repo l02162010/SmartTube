@@ -84,6 +84,15 @@ key 外洩時：先到 console.anthropic.com 撤銷舊 key，再用上面的方�
 - **翻成繁體中文時使用台灣用語**：prompt 列了台灣用語對照，輸出若出現簡體字或粵語用字（嘅、咗、唔……）會自動重翻。
 - 斷句或 prompt 改了，要把 `ClaudeTranslator.PROMPT_VERSION` 加 1，舊快取才會失效。
 
+## 效能與費用（2026-10 在 Chromecast with Google TV 4K 實測）
+
+- **負擔**：開或關雙語字幕，播放時 CPU 都約 11%（4 核平均）；影片走硬體 VP9 解碼（`c2.amlogic.vp9.decoder`），字幕換句時影片 0 掉幀。
+- **速度**：2～5 小時的 podcast，原文約 1～2 秒出現（下載＋解析），第一句翻譯再約 2 秒（播放位置先翻 10 句）。
+- **只翻往後 5 分鐘**（`DualSubSession.LOOKAHEAD_MS`）：看一段就換台時不會付整支的錢；離開時已翻的部分存進快取，下次只補缺的。
+- **費用**：Haiku 5.5（$0.10／百萬輸入、$0.50／百萬輸出 token）約 **$0.044／每小時內容**；Sonnet 5.5 約 20 倍。
+  累計用量在 設定 → 字幕 →「Claude 用量」，每支影片的用量也會寫進 logcat（`Dual subs usage`）。
+- 量測方式：`adb logcat | grep DualSubtitleController` 看 `loaded`（下載／解析時間）、`translated`、`usage`。
+
 ## 疑難排解
 
 - **模擬器連不上網（UnknownHostException）**：用 `emulator -avd <名稱> -dns-server 8.8.8.8,1.1.1.1` 啟動。
