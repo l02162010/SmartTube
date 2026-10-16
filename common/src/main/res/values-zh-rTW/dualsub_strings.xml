@@ -22,4 +22,5 @@
     <string name="dualsub_qr_hint">手機要連同一個 Wi-Fi。\n用過一次或 5 分鐘後連結就會失效。</string>
     <string name="dualsub_qr_saved">API key 已更新（••••%s）</string>
     <string name="dualsub_qr_no_network">沒有連上區域網路</string>
+    <string name="dualsub_usage">Claude 用量：輸入 %1$s／輸出 %2$s tokens（按下歸零）</string>
 </resources>

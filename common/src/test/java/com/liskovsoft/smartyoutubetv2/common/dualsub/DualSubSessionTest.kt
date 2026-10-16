@@ -47,27 +47,58 @@ class DualSubSessionTest {
         val listener = Waiter()
         val session = DualSubSession(track, http, translator, cache, name, listener)
 
-        session.start(125_000) // inside cue 125 -> batch 120..159 first
+        session.start(125_000) // inside cue 125
 
         assertTrue(listener.ready.await(5, TimeUnit.SECONDS))
-        awaitTrue { (0 until 200).all { session.translation(it) != null } }
+        awaitTrue { (125 until 200).all { session.translation(it) != null } }
 
         // A small batch right at the position first, then full batches
         assertEquals(listOf("line125") + (126 until 135).map { "line$it" }, http.requests[0])
         assertTrue(http.requests.any { it.size == DualSubSession.BATCH_SIZE })
         assertEquals("line125-tr", session.translation(125))
         assertEquals("line125", session.original(session.findIndex(125_100)))
+        // Lines already behind the position are not paid for
+        assertTrue((0 until 125).all { session.translation(it) == null })
         assertTrue(listener.errors.isEmpty())
 
-        // Second open: straight from the cache, no requests
-        awaitTrue { cache.read(name) != null }
+        // Saved once idle; second open at the same spot: straight from the cache, no requests
+        awaitTrue { cache.read(name)?.translations?.count { it != null } == 75 }
         val http2 = FakeClaude()
         val listener2 = Waiter()
         val session2 = DualSubSession(track, http2, ClaudeTranslator(http2, "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hant"), cache, name, listener2)
-        session2.start(0)
+        session2.start(125_000)
         assertTrue(listener2.ready.await(5, TimeUnit.SECONDS))
-        assertEquals("line7-tr", session2.translation(7))
+        assertEquals("line130-tr", session2.translation(130))
+        Thread.sleep(300)
         assertTrue(http2.requests.isEmpty())
+        session2.cancel()
+    }
+
+    @Test
+    fun onlyTranslatesAheadOfThePosition() {
+        // 2000 lines, one per second (33 minutes)
+        val http = FakeClaude().apply { subtitleBody = manualJson(2000) }
+        val translator = ClaudeTranslator(http, "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hant")
+        val listener = Waiter()
+        val session = DualSubSession(track, http, translator, null, null, listener)
+        val lookaheadLines = (DualSubSession.LOOKAHEAD_MS / 1000).toInt()
+
+        session.start(0)
+        assertTrue(listener.ready.await(5, TimeUnit.SECONDS))
+        awaitTrue { session.translation(lookaheadLines - 1) != null }
+        Thread.sleep(300)
+
+        // Nothing far beyond the 5 minute window
+        val translated = (0 until 2000).count { session.translation(it) != null }
+        assertTrue("translated $translated", translated <= lookaheadLines + DualSubSession.BATCH_SIZE)
+        assertTrue((1000 until 2000).all { session.translation(it) == null })
+
+        // Seeking far ahead moves the window there
+        session.setPositionMs(1_500_000)
+        awaitTrue { session.translation(1500) != null && session.translation(1700) != null }
+        assertTrue((700 until 1400).all { session.translation(it) == null })
+        assertTrue(session.tokenUsage.first > 0)
+        session.cancel()
     }
 
     @Test
@@ -117,16 +148,6 @@ class DualSubSessionTest {
         val saved = cache.read("early.json")!!.translations
         assertEquals("line50-tr", saved[50])
         assertEquals(DualSubSession.QUICK_BATCH_SIZE, saved.count { it != null })
-    }
-
-    @Test
-    fun batchOrderStartsAtPlaybackPosition() {
-        val batches = listOf(0, 40, 80, 120, 160).map { it to it + 40 }
-        val current = 125
-
-        val order = batches.sortedBy { (from, to) -> DualSubSession.batchPriority(from, to, current) }.map { it.first }
-
-        assertEquals(listOf(120, 160, 80, 40, 0), order)
     }
 
     @Test

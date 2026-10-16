@@ -182,6 +182,7 @@ class DualSubtitleController : BasePlayerController() {
     }
 
     private fun stop() {
+        session?.let { recordUsage(it) }
         session?.cancel()
         session = null
         stopPolling()
@@ -189,6 +190,14 @@ class DualSubtitleController : BasePlayerController() {
         if (isActive) {
             isActive = false
             player?.setDualSubtitle(null, null) // give subtitles back to ExoPlayer
+        }
+    }
+
+    private fun recordUsage(session: DualSubSession) {
+        val (input, output) = session.tokenUsage
+        if (input > 0 || output > 0) {
+            Log.d(TAG, "Dual subs usage: %s input + %s output tokens", input, output)
+            data?.addUsage(input, output)
         }
     }
 
@@ -220,7 +229,9 @@ class DualSubtitleController : BasePlayerController() {
             return
         }
 
-        val index = session.findIndex(player.positionMs)
+        val positionMs = player.positionMs
+        session.setPositionMs(positionMs) // moves the translation window along with playback
+        val index = session.findIndex(positionMs)
         val translation = if (index >= 0) session.translation(index) else null
         val key = index * 2L + (if (translation != null) 1 else 0)
 

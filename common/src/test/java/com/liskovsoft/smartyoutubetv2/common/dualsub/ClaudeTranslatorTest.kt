@@ -49,6 +49,10 @@ class FakeClaude(private val respond: (FakeClaude, List<String>) -> HttpResult? 
             return HttpResult(200, JsonObject().apply {
                 add("content", content)
                 addProperty("stop_reason", "end_turn")
+                add("usage", JsonObject().apply {
+                    addProperty("input_tokens", 100)
+                    addProperty("output_tokens", 20)
+                })
             }.toString())
         }
     }
@@ -70,6 +74,18 @@ class ClaudeTranslatorTest {
         assertEquals(listOf("ctx"), http.contexts[0])
         assertEquals("sk-test", http.headers[0]["x-api-key"])
         assertEquals("2023-06-01", http.headers[0]["anthropic-version"])
+    }
+
+    @Test
+    fun countsBilledTokens() {
+        val http = FakeClaude { _, lines -> if (lines.size > 1) FakeClaude.ok(listOf("merged")) else null }
+        val translator = translator(http)
+
+        translator.translateWithSplit(listOf("a", "b"), emptyList())
+
+        // 3 calls (the bad 2-line answer is billed too)
+        assertEquals(300, translator.inputTokens.get())
+        assertEquals(60, translator.outputTokens.get())
     }
 
     @Test

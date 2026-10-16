@@ -30,6 +30,13 @@ class DualSubSession(
         /** The batch at the playback position is small so its translation shows up within a couple of seconds */
         const val QUICK_BATCH_SIZE = 10
         const val WORKERS = 4
+        /**
+         * Only lines starting within this window ahead of the playback position are translated: viewers often
+         * leave long videos early, so translating the whole thing up front mostly paid for lines nobody saw.
+         * Translation runs ~20 lines/s versus ~0.3 lines/s of speech, so 5 minutes is plenty of headroom.
+         */
+        const val LOOKAHEAD_MS = 5 * 60_000L
+        private const val IDLE_WAIT_MS = 1_000L
 
         @JvmStatic
         fun toJson3Url(url: String): String {
@@ -39,14 +46,6 @@ class DualSubSession(
             } else {
                 url + (if ('?' in url) "&" else "?") + "fmt=json3"
             }
-        }
-
-        /**
-         * Lower goes first: the batch at the [current] cue, then the following ones, the earlier ones last.
-         */
-        @JvmStatic
-        fun batchPriority(from: Int, to: Int, current: Int): Long {
-            return if (to > current) from.toLong() else Int.MAX_VALUE.toLong() + (current - from)
         }
     }
 
@@ -72,6 +71,10 @@ class DualSubSession(
     private var inFlight = 0
     private val hadErrors = AtomicBoolean(false)
     private val savedComplete = AtomicBoolean(false)
+    /** New translations not written to the cache yet */
+    private val dirty = AtomicBoolean(false)
+    /** Wakes idle workers when the playback position moves */
+    private val positionSignal = java.lang.Object()
     private var translateStartMs = 0L
 
     @Volatile
@@ -100,10 +103,15 @@ class DualSubSession(
         savePartial()
     }
 
-    /** Untranslated batches near this position go first (call it on seek). */
+    /** Drives what gets translated: call it on seek and regularly while playing. */
     fun setPositionMs(positionMs: Long) {
         this.positionMs = positionMs
+        synchronized(positionSignal) { positionSignal.notifyAll() }
     }
+
+    /** Input and output tokens billed for this video so far */
+    val tokenUsage: Pair<Long, Long>
+        get() = (translator?.inputTokens?.get() ?: 0L) to (translator?.outputTokens?.get() ?: 0L)
 
     /** -1 when nothing is shown at this position. */
     fun findIndex(positionMs: Long): Int = findCueIndex(cues, positionMs)
@@ -217,13 +225,27 @@ class DualSubSession(
 
     private fun translateLoop(translator: ClaudeTranslator) {
         while (!cancelled.get()) {
-            val batch = takeNext() ?: return
+            val batch = takeNext()
+
+            if (batch == null) {
+                if (!hasPending()) {
+                    return
+                }
+                // Everything near the position is done: save, then wait for playback to move on
+                if (isIdle() && dirty.compareAndSet(true, false)) {
+                    save()
+                }
+                synchronized(positionSignal) { positionSignal.wait(IDLE_WAIT_MS) }
+                continue
+            }
+
             val lines = cues.subList(batch.from, batch.to).map { it.text }
             val context = cues.subList(maxOf(0, batch.from - ClaudeTranslator.CONTEXT_LINES), batch.from).map { it.text }
 
             try {
                 val result = translator.translateWithSplit(lines, context)
                 result.forEachIndexed { i, text -> translations.set(batch.from + i, text) }
+                dirty.set(true)
                 listener.onTranslated()
             } catch (e: FatalApiException) {
                 if (cancelled.compareAndSet(false, true)) {
@@ -244,6 +266,7 @@ class DualSubSession(
             }
 
             if (finished && !cancelled.get()) {
+                dirty.set(false)
                 save()
                 savedComplete.set(true)
                 val missing = (0 until translations.length()).count { translations.get(it) == null }
@@ -252,18 +275,28 @@ class DualSubSession(
         }
     }
 
+    private fun hasPending(): Boolean = synchronized(pending) { pending.isNotEmpty() }
+
+    private fun isIdle(): Boolean = synchronized(pending) { inFlight == 0 }
+
     /**
-     * Next batch to translate. When the playback position falls into an untranslated range, a small batch is cut
-     * right there (shows up fast after opening or seeking); otherwise a full batch from the most urgent range.
+     * Next batch to translate, or null when nothing is due yet. When the playback position falls into an
+     * untranslated range, a small batch is cut right there (shows up fast after opening or seeking); otherwise a
+     * full batch from the closest range ahead that starts within [LOOKAHEAD_MS]. Lines behind the position wait
+     * until the viewer seeks back.
      */
     private fun takeNext(): Batch? = synchronized(pending) {
         if (pending.isEmpty()) {
             return null
         }
 
-        val current = findCueIndexFrom(cues, positionMs)
+        val position = positionMs
+        val current = findCueIndexFrom(cues, position)
         val containing = pending.firstOrNull { current >= it.from && current < it.to }
-        val range = containing ?: pending.minByOrNull { batchPriority(it.from, it.to, current) }!!
+        val range = containing ?: pending
+            .filter { it.from >= current && cues[it.from].startMs <= position + LOOKAHEAD_MS }
+            .minByOrNull { it.from }
+            ?: return null
         val from = if (containing != null) current else range.from
         val to = minOf(from + if (containing != null) QUICK_BATCH_SIZE else BATCH_SIZE, range.to)
 

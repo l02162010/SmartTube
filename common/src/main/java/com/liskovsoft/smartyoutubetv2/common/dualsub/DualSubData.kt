@@ -19,6 +19,8 @@ class DualSubData private constructor(context: Context) {
         private const val KEY_MODEL = "model"
         private const val KEY_API_KEY = "api_key"
         private const val KEY_PREFER_HUMAN = "prefer_human"
+        private const val KEY_USAGE_INPUT = "usage_input_tokens"
+        private const val KEY_USAGE_OUTPUT = "usage_output_tokens"
 
         val TARGET_LANGS = listOf("zh-Hant", "zh-Hans", "en", "ja", "ko")
         val SOURCE_LANGS = listOf("en", "ja", "ko", "zh-Hant", "zh-Hans", "es", "fr", "de")
@@ -86,6 +88,23 @@ class DualSubData private constructor(context: Context) {
     /** Only the last 4 chars are ever shown on screen */
     val maskedApiKey: String
         get() = apiKey.let { if (it.length < 4) "" else "••••" + it.takeLast(4) }
+
+    /** Claude tokens used since the last reset: input to output */
+    val usage: Pair<Long, Long>
+        get() = prefs.getLong(KEY_USAGE_INPUT, 0) to prefs.getLong(KEY_USAGE_OUTPUT, 0)
+
+    /** Not a setting: doesn't notify listeners (that would reload the video) */
+    fun addUsage(inputTokens: Long, outputTokens: Long) {
+        if (inputTokens == 0L && outputTokens == 0L) {
+            return
+        }
+        val (input, output) = usage
+        prefs.edit().putLong(KEY_USAGE_INPUT, input + inputTokens).putLong(KEY_USAGE_OUTPUT, output + outputTokens).apply()
+    }
+
+    fun resetUsage() {
+        prefs.edit().putLong(KEY_USAGE_INPUT, 0).putLong(KEY_USAGE_OUTPUT, 0).apply()
+    }
 
     fun addOnChange(listener: Runnable) {
         listeners.add(listener)

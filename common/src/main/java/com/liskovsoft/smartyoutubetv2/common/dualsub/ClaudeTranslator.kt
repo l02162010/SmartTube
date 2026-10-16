@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 
 /** Retrying won't help: bad API key (401/403), unknown model, malformed request... */
 class FatalApiException(val code: Int, message: String) : Exception(message) {
@@ -51,6 +52,10 @@ class ClaudeTranslator(
             else -> code
         }
     }
+
+    /** Tokens billed so far (from the API "usage" field), including failed outputs that were retried */
+    val inputTokens = AtomicLong()
+    val outputTokens = AtomicLong()
 
     private val systemPrompt = """
         You are a professional subtitle translator. Translate video subtitles into ${languageName(targetLanguage)}.${scriptRule()}
@@ -157,6 +162,10 @@ class ClaudeTranslator(
     private fun parseResponse(body: String, expectedSize: Int): List<String> {
         val text = try {
             val root = JsonParser().parse(body).asJsonObject
+            root.getAsJsonObject("usage")?.let { usage ->
+                usage.get("input_tokens")?.takeIf { it.isJsonPrimitive }?.let { inputTokens.addAndGet(it.asLong) }
+                usage.get("output_tokens")?.takeIf { it.isJsonPrimitive }?.let { outputTokens.addAndGet(it.asLong) }
+            }
             if (root.get("stop_reason")?.asString == "max_tokens") {
                 throw BadOutputException("Output truncated")
             }

@@ -11,6 +11,12 @@ import com.liskovsoft.smartyoutubetv2.common.utils.SimpleEditDialog
  * Dual subtitle rows of the subtitle settings dialog.
  */
 object DualSubSettings {
+    private fun formatTokens(tokens: Long): String = when {
+        tokens >= 1_000_000 -> String.format(java.util.Locale.ROOT, "%.2fM", tokens / 1_000_000.0)
+        tokens >= 1_000 -> String.format(java.util.Locale.ROOT, "%.1fK", tokens / 1_000.0)
+        else -> tokens.toString()
+    }
+
     @JvmStatic
     fun append(context: Context, settingsPresenter: AppDialogPresenter) {
         val data = DualSubData.instance(context)
@@ -51,6 +57,12 @@ object DualSubSettings {
                 data.apiKey = newValue ?: ""
                 true
             }
+        })
+
+        val (input, output) = data.usage
+        settingsPresenter.appendSingleButton(UiOptionItem.from(context.getString(R.string.dualsub_usage, formatTokens(input), formatTokens(output))) {
+            data.resetUsage()
+            settingsPresenter.closeDialog()
         })
 
         settingsPresenter.appendSingleButton(UiOptionItem.from(context.getString(R.string.dualsub_api_key_qr)) {
