@@ -52,5 +52,10 @@ object DualSubSettings {
                 true
             }
         })
+
+        settingsPresenter.appendSingleButton(UiOptionItem.from(context.getString(R.string.dualsub_api_key_qr)) {
+            settingsPresenter.closeDialog()
+            QrKeyDialog.show(context)
+        })
     }
 }

@@ -17,4 +17,9 @@
     <string name="dualsub_api_key_invalid">Dual subtitles: the API key was rejected, check it in Subtitle settings</string>
     <string name="dualsub_translate_failed">Dual subtitles: translation failed, showing original only (%s)</string>
     <string name="dualsub_load_failed">Dual subtitles: can\'t load the original subtitles (%s)</string>
+    <string name="dualsub_api_key_qr">Set API key from phone (QR code)</string>
+    <string name="dualsub_qr_title">Scan with your phone</string>
+    <string name="dualsub_qr_hint">Phone must be on the same Wi-Fi.\nThe link expires after one use or 5 minutes.</string>
+    <string name="dualsub_qr_saved">API key updated (••••%s)</string>
+    <string name="dualsub_qr_no_network">Not connected to a local network</string>
 </resources>

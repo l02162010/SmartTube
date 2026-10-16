@@ -17,4 +17,9 @@
     <string name="dualsub_api_key_invalid">雙語字幕：API key 被拒絕，請到字幕設定檢查</string>
     <string name="dualsub_translate_failed">雙語字幕：翻譯失敗，暫時只顯示原文（%s）</string>
     <string name="dualsub_load_failed">雙語字幕：無法載入原文字幕（%s）</string>
+    <string name="dualsub_api_key_qr">用手機設定 API key（掃 QR code）</string>
+    <string name="dualsub_qr_title">用手機掃描</string>
+    <string name="dualsub_qr_hint">手機要連同一個 Wi-Fi。\n用過一次或 5 分鐘後連結就會失效。</string>
+    <string name="dualsub_qr_saved">API key 已更新（••••%s）</string>
+    <string name="dualsub_qr_no_network">沒有連上區域網路</string>
 </resources>

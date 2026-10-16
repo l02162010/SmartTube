@@ -104,6 +104,7 @@ dependencies {
     implementation 'com.jakewharton:process-phoenix:' + phoenixVersion
 
     implementation 'com.google.code.gson:gson:' + gsonVersion // MOD: dual subtitles
+    implementation 'com.google.zxing:core:3.3.3' // MOD: dual subtitles QR code (Java 7, Android 4 compatible)
 
     implementation project(':leanbackassistant')
 
