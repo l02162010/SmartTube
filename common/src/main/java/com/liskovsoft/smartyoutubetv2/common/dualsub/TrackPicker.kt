@@ -18,40 +18,35 @@ object TrackPicker {
     }
 
     /**
-     * Picks one original track.
+     * Picks the subtitle track of the language actually spoken in the video, or null when that's unknown.
+     * Guessing (first uploaded track, English...) put uploaded translations or multi-language
+     * learning tracks on screen, so it's better to show nothing.
      *
      * 1. Machine translated tracks (tlang=) and auto-dub transcripts are never used.
-     * 2. [preferredLang] (user setting) wins, then [audioLang] (the video's original audio), manual subs first.
-     * 3. Otherwise: manual track in the auto-caption language -> auto track.
-     * 4. No auto track and unknown audio: the original can't be told apart from uploaded translations,
-     *    so a track the viewer reads ([targetLang], dual subs then step aside) -> English -> first manual.
+     * 2. [preferredLang] (user setting) wins.
+     * 3. Spoken language = [audioLang] (original audio track) or else the ASR track language
+     *    (speech recognition always runs on the spoken language).
+     * 4. Manual track in the spoken language, else its ASR track.
      */
     @JvmStatic
     @JvmOverloads
-    fun pick(tracks: List<SubTrack>, preferredLang: String?, audioLang: String? = null, targetLang: String? = null): SubTrack? {
+    fun pick(tracks: List<SubTrack>, preferredLang: String?, audioLang: String? = null): SubTrack? {
         val originals = tracks.filter { !isTranslated(it.url) && !isDubTranscript(it.url) }
 
-        for (lang in listOf(preferredLang, audioLang)) {
-            if (lang.isNullOrBlank()) {
-                continue
-            }
-            val matched = originals.filter { LangUtil.isSame(it.languageCode, lang) }
-            val track = matched.firstOrNull { !it.isAuto } ?: matched.firstOrNull()
-            if (track != null) {
-                return track
-            }
+        if (!preferredLang.isNullOrBlank()) {
+            inLanguage(originals, preferredLang)?.let { return it }
         }
 
-        val auto = originals.firstOrNull { it.isAuto }
+        val spoken = audioLang?.takeIf { it.isNotBlank() }
+            ?: originals.firstOrNull { it.isAuto }?.languageCode
+            ?: return null
 
-        if (auto != null) {
-            originals.firstOrNull { !it.isAuto && LangUtil.isSame(it.languageCode, auto.languageCode) }?.let { return it }
-            return auto
-        }
+        return inLanguage(originals, spoken)
+    }
 
-        return originals.firstOrNull { LangUtil.isSameLanguage(it.languageCode, targetLang) }
-            ?: originals.firstOrNull { LangUtil.isSame(it.languageCode, "en") }
-            ?: originals.firstOrNull()
+    private fun inLanguage(tracks: List<SubTrack>, lang: String): SubTrack? {
+        val matched = tracks.filter { LangUtil.isSame(it.languageCode, lang) }
+        return matched.firstOrNull { !it.isAuto } ?: matched.firstOrNull()
     }
 
     /**

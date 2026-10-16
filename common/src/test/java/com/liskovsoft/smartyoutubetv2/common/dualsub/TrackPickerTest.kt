@@ -32,6 +32,32 @@ class TrackPickerTest {
     }
 
     @Test
+    fun scriptCheck() {
+        // The "ar" track of a Chinese learning vlog: pinyin + Chinese + Arabic on one cue
+        val mixed = listOf("zhèi yàng de huà 这样的话就能省很多时间 بهذه الطريقة يمكنني توفير الكثير من الوقت")
+        assertFalse(LangUtil.matchesScript(mixed, "ar"))
+        assertTrue(LangUtil.matchesScript(listOf("بهذه الطريقة يمكنني توفير الكثير من الوقت"), "ar"))
+        // Normal tracks pass, a few foreign names are fine
+        assertTrue(LangUtil.matchesScript(listOf("And then we went to Tokyo with Jia Jiang."), "en"))
+        assertTrue(LangUtil.matchesScript(listOf("僕ね12年前にメキシコに来ました", "ポッドキャスト"), "ja"))
+        assertTrue(LangUtil.matchesScript(listOf("Привет, как дела?"), "ru"))
+        // Mislabeled: Chinese text in an English track
+        assertFalse(LangUtil.matchesScript(listOf("我每天早上六點起床", "然後去上班"), "en"))
+    }
+
+    @Test
+    fun textReadability() {
+        // The "ar" track of a Chinese learning vlog
+        val mixed = listOf("zhèi yàng de huà 这样的话就能省很多时间 بهذه الطريقة", "wǒ měi tiān 我每天早上 أنا كل يوم")
+        assertTrue(LangUtil.isTextReadableAs(mixed, "zh-Hant"))
+        assertFalse(LangUtil.isTextReadableAs(mixed, "en"))
+        // Japanese has kanji too, but kana tells it apart
+        assertFalse(LangUtil.isTextReadableAs(listOf("僕ね12年前にメキシコに来ました", "日本語が分かる"), "zh-Hant"))
+        assertFalse(LangUtil.isTextReadableAs(listOf("Hello there", "General Kenobi"), "zh-Hant"))
+        assertFalse(LangUtil.isTextReadableAs(emptyList(), "zh-Hant"))
+    }
+
+    @Test
     fun translatedTracksAreNeverPicked() {
         assertNull(TrackPicker.pick(listOf(zhTranslated), null))
         assertNull(TrackPicker.pick(listOf(zhTranslated), "zh-Hant"))
@@ -48,9 +74,10 @@ class TrackPickerTest {
     }
 
     @Test
-    fun englishBeforeOtherManualWithoutAuto() {
-        assertEquals(enManual, TrackPicker.pick(listOf(jaManual, enManual), null))
-        assertEquals(jaManual, TrackPicker.pick(listOf(jaManual), null))
+    fun unknownSpokenLanguageGivesNothing() {
+        // No ASR and no audio info: any of these could be an uploaded translation
+        assertNull(TrackPicker.pick(listOf(jaManual, enManual), null))
+        assertEquals(jaManual, TrackPicker.pick(listOf(jaManual, enManual), null, "ja"))
     }
 
     @Test
@@ -70,12 +97,12 @@ class TrackPickerTest {
         val dubAsr = SubTrack("en", "$base&kind=asr&lang=en&variant=timing-optimized", true)
         val tracks = listOf(enUs, dubAsr, zhHans, zhHant)
 
-        assertEquals(enUs, TrackPicker.pick(tracks, null)) // old rule: first manual
+        assertNull(TrackPicker.pick(tracks, null)) // spoken language unknown
         assertEquals(zhHant, TrackPicker.pick(tracks, null, "zh-Hant"))
         // The user's source setting still wins
         assertEquals(enUs, TrackPicker.pick(tracks, "en", "zh-Hant"))
-        // Unknown audio language: same as before
-        assertEquals(enUs, TrackPicker.pick(tracks, null, "ko"))
+        // Spoken language without subtitles: nothing
+        assertNull(TrackPicker.pick(tracks, null, "ko"))
     }
 
     @Test
@@ -85,11 +112,11 @@ class TrackPickerTest {
         val en = SubTrack("en", "$base&lang=en", false)
         val zhCn = SubTrack("zh-CN", "$base&lang=zh-CN", false)
 
-        // A track the viewer reads wins (the controller then skips dual subs)
-        assertEquals(zhCn, TrackPicker.pick(listOf(ar, en, zhCn), null, null, "zh-Hant"))
-        // Otherwise English rather than whatever comes first
-        assertEquals(en, TrackPicker.pick(listOf(ar, en), null, null, "zh-Hant"))
-        assertEquals(ar, TrackPicker.pick(listOf(ar), null, null, "zh-Hant"))
+        // Never guess
+        assertNull(TrackPicker.pick(listOf(ar, en, zhCn), null))
+        assertNull(TrackPicker.pick(listOf(ar), null))
+        // Known spoken language: its track
+        assertEquals(zhCn, TrackPicker.pick(listOf(ar, en, zhCn), null, "zh-CN"))
     }
 
     @Test

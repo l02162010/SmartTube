@@ -22,6 +22,8 @@ class DualSubSession(
     private val listener: Listener,
     /** Human translation track: used instead of [translator] when set */
     private val humanTranslationTrack: SubTrack? = null,
+    /** Checked on the original text before translating: true = mixed/mislabeled or already readable, give up */
+    private val isUnusable: (List<SubCue>) -> Boolean = { false },
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     companion object {
@@ -54,6 +56,8 @@ class DualSubSession(
         fun onTranslated()
         /** [fatal] = translation stopped for this video (e.g. bad API key). */
         fun onError(error: Throwable, fatal: Boolean)
+        /** The original text can't be used (mixed languages, wrong script or already readable): nothing to show. */
+        fun onUnusable() {}
     }
 
     private class Batch(val from: Int, val to: Int)
@@ -107,6 +111,11 @@ class DualSubSession(
         val parsed = Json3Parser.parse(fetchTrack(track), track.isAuto)
 
         if (cancelled.get()) {
+            return
+        }
+
+        if (isUnusable(parsed)) {
+            listener.onUnusable()
             return
         }
 

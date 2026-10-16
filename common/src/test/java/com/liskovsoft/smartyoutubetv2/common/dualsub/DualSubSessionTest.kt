@@ -113,6 +113,27 @@ class DualSubSessionTest {
     }
 
     @Test
+    fun readableOriginalStopsBeforeTranslating() {
+        val json = """{"events":[{"tStartMs":0,"dDurationMs":900,"segs":[{"utf8":"wǒ 我每天早上"}]}]}"""
+        val http = FakeClaude().apply { subtitleBody = json }
+        val notNeeded = java.util.concurrent.CountDownLatch(1)
+        val session = DualSubSession(track, http, ClaudeTranslator(http, "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hant"), null, null,
+            object : DualSubSession.Listener {
+                override fun onCuesReady() {}
+                override fun onTranslated() {}
+                override fun onError(error: Throwable, fatal: Boolean) {}
+                override fun onUnusable() = notNeeded.countDown()
+            },
+            isUnusable = { cues -> LangUtil.isTextReadableAs(cues.map { it.text }, "zh-Hant") })
+
+        session.start(0)
+
+        assertTrue(notNeeded.await(5, TimeUnit.SECONDS))
+        assertTrue(http.requests.isEmpty())
+        assertTrue(!session.isReady)
+    }
+
+    @Test
     fun cacheEvictsLeastRecentlyUsed() {
         val cache = TranslationCache(tmp.root, maxBytes = 200) // fits one ~130 byte file, not two
         val cues = listOf(SubCue(0, 1, "x".repeat(100)))

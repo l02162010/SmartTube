@@ -106,9 +106,10 @@ class DualSubtitleController : BasePlayerController() {
         }
 
         // No original subs: leave ExoPlayer subtitles alone
-        val track = TrackPicker.pick(tracks, data.sourceLang, video.originalAudioLanguage, data.targetLang)
+        val track = TrackPicker.pick(tracks, data.sourceLang, video.originalAudioLanguage)
         if (track == null) {
-            Log.d(TAG, "Dual subs: no original track among %s", tracks.map { it.languageCode + if (it.isAuto) "(auto)" else "" })
+            Log.d(TAG, "Dual subs: no track in the spoken language (audio=%s) among %s", video.originalAudioLanguage,
+                tracks.map { it.languageCode + if (it.isAuto) "(auto)" else "" })
             return
         }
 
@@ -138,12 +139,24 @@ class DualSubtitleController : BasePlayerController() {
             tracks.map { it.languageCode + if (it.isAuto) "(auto)" else "" })
 
         lateinit var newSession: DualSubSession
-        newSession = DualSubSession(track, http, translator, cache, cacheName, humanTranslationTrack = humanTrack, listener = object : DualSubSession.Listener {
+        val targetLang = data.targetLang
+        newSession = DualSubSession(track, http, translator, cache, cacheName,
+            humanTranslationTrack = humanTrack,
+            isUnusable = { cues ->
+                val texts = cues.map { it.text }
+                !LangUtil.matchesScript(texts, track.languageCode) || LangUtil.isTextReadableAs(texts, targetLang)
+            },
+            listener = object : DualSubSession.Listener {
             override fun onCuesReady() = onMain { activate() }
 
             override fun onTranslated() = onMain { render() }
 
             override fun onError(error: Throwable, fatal: Boolean) = onMain { showError(error, fatal) }
+
+            override fun onUnusable() = onMain {
+                Log.d(TAG, "Dual subs: %s track text is mixed, mislabeled or already readable as %s, skipping", track.languageCode, targetLang)
+                stop()
+            }
 
             private fun onMain(action: () -> Unit) {
                 mainHandler.post { if (session === newSession) action() }
