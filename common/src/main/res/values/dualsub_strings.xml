@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dualsub_title">Dual subtitles (AI translation)</string>
+    <string name="dualsub_enable">Dual subtitles</string>
+    <string name="dualsub_target_lang">Translate to</string>
+    <string name="dualsub_prefer_human">Prefer YouTube human translation</string>
+    <string name="dualsub_using_human">Dual subtitles: using YouTube\'s human translation (can be turned off in Subtitle settings)</string>
+    <string name="dualsub_show_original">Show original</string>
+    <string name="dualsub_source_lang">Source language</string>
+    <string name="dualsub_source_auto">Auto</string>
+    <string name="dualsub_model">Model</string>
+    <string name="dualsub_model_haiku">Haiku (fast, cheap)</string>
+    <string name="dualsub_model_sonnet">Sonnet (better quality)</string>
+    <string name="dualsub_api_key">Claude API key</string>
+    <string name="dualsub_api_key_not_set">Not set</string>
+    <string name="dualsub_api_key_missing">Dual subtitles: set your Claude API key in Subtitle settings</string>
+    <string name="dualsub_api_key_invalid">Dual subtitles: the API key was rejected, check it in Subtitle settings</string>
+    <string name="dualsub_translate_failed">Dual subtitles: translation failed, showing original only (%s)</string>
+    <string name="dualsub_load_failed">Dual subtitles: can\'t load the original subtitles (%s)</string>
+</resources>

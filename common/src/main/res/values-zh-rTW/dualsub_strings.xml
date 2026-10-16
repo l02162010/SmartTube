@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dualsub_title">雙語字幕（AI 翻譯）</string>
+    <string name="dualsub_enable">雙語字幕</string>
+    <string name="dualsub_target_lang">翻譯成</string>
+    <string name="dualsub_prefer_human">優先使用 YouTube 人工翻譯</string>
+    <string name="dualsub_using_human">雙語字幕：使用 YouTube 人工翻譯（可到字幕設定關閉）</string>
+    <string name="dualsub_show_original">顯示原文</string>
+    <string name="dualsub_source_lang">來源語言</string>
+    <string name="dualsub_source_auto">自動</string>
+    <string name="dualsub_model">模型</string>
+    <string name="dualsub_model_haiku">Haiku（快、便宜）</string>
+    <string name="dualsub_model_sonnet">Sonnet（品質較好）</string>
+    <string name="dualsub_api_key">Claude API key</string>
+    <string name="dualsub_api_key_not_set">尚未設定</string>
+    <string name="dualsub_api_key_missing">雙語字幕：請先到字幕設定填入 Claude API key</string>
+    <string name="dualsub_api_key_invalid">雙語字幕：API key 被拒絕，請到字幕設定檢查</string>
+    <string name="dualsub_translate_failed">雙語字幕：翻譯失敗，暫時只顯示原文（%s）</string>
+    <string name="dualsub_load_failed">雙語字幕：無法載入原文字幕（%s）</string>
+</resources>

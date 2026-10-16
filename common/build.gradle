@@ -22,6 +22,11 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles 'consumer-rules.pro'
 
+        // MOD: dual subtitles. Defaults from the root .env (git ignored)
+        def dualSubEnv = loadDualSubEnv()
+        buildConfigField "String", "DUALSUB_API_KEY", "\"${dualSubEnv.getOrDefault('CLAUDE_API_KEY', '')}\""
+        buildConfigField "String", "DUALSUB_MODEL", "\"${dualSubEnv.getOrDefault('CLAUDE_MODEL', 'claude-haiku-5-5')}\""
+
         // More info: http://myhexaville.com/2017/03/10/android-multidex/
         // Additionally, you should extend your application from MultiDexApplication
         multiDexEnabled = true
@@ -98,9 +103,27 @@ dependencies {
 
     implementation 'com.jakewharton:process-phoenix:' + phoenixVersion
 
+    implementation 'com.google.code.gson:gson:' + gsonVersion // MOD: dual subtitles
+
     implementation project(':leanbackassistant')
 
     implementation project(':appupdatechecker2')
 
     implementation project(':slidableactivity') // https://github.com/r0adkll/Slidr
+}
+
+// MOD: dual subtitles. Minimal KEY=VALUE parser for the root .env file
+def loadDualSubEnv() {
+    def env = [:]
+    def file = rootProject.file('.env')
+    if (file.exists()) {
+        file.eachLine { line ->
+            def trimmed = line.trim()
+            if (trimmed && !trimmed.startsWith('#') && trimmed.contains('=')) {
+                def (key, value) = trimmed.split('=', 2).collect { it.trim() }
+                if (value) env[key] = value.replaceAll(/^["']|["']$/, '')
+            }
+        }
+    }
+    return env
 }

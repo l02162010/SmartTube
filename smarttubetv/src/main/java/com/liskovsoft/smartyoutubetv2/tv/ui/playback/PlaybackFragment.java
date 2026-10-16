@@ -58,6 +58,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.ExoPlayerController;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.DebugInfoManager;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.ExoPlayerInitializer;
+import com.liskovsoft.smartyoutubetv2.common.dualsub.DualCueBuilder;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.SubtitleManager;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.versions.renderer.CustomOverridesRenderersFactory;
@@ -1360,6 +1361,14 @@ public class PlaybackFragment extends SeekModePlaybackFragment implements Playba
         createSubtitleManager();
         if (mSubtitleManager != null) {
             mSubtitleManager.show(show);
+        }
+    }
+
+    @Override
+    public void setDualSubtitle(String translation, String original) {
+        createSubtitleManager();
+        if (mSubtitleManager != null) {
+            mSubtitleManager.setExtraCues(translation == null && original == null ? null : DualCueBuilder.build(translation, original));
         }
     }
 

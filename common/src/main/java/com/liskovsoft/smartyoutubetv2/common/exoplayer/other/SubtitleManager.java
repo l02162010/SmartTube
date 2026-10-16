@@ -32,6 +32,8 @@ public class SubtitleManager implements TextOutput, OnDataChange {
     private final AppPrefs mPrefs;
     private final PlayerData mPlayerData;
     private CharSequence subsBuffer;
+    private List<Cue> mExoCues = new ArrayList<>();
+    private List<Cue> mExtraCues; // MOD: dual subtitles. null = not active
 
     public static class SubtitleStyle {
         public final int nameResId;
@@ -71,8 +73,25 @@ public class SubtitleManager implements TextOutput, OnDataChange {
 
     @Override
     public void onCues(List<Cue> cues) {
+        mExoCues = forceCenterAlignment(cues);
+        if (mSubtitleView != null && mExtraCues == null) {
+            mSubtitleView.setCues(mExoCues);
+        }
+    }
+
+    /**
+     * MOD: dual subtitles. Shown instead of ExoPlayer cues (avoids the same line twice). null = back to ExoPlayer cues.
+     */
+    public void setExtraCues(List<Cue> cues) {
+        boolean modeChanged = (mExtraCues == null) != (cues == null);
+        mExtraCues = cues;
+
+        if (modeChanged) {
+            configureSubtitleView();
+        }
+
         if (mSubtitleView != null) {
-            mSubtitleView.setCues(forceCenterAlignment(cues));
+            mSubtitleView.setCues(cues != null ? cues : mExoCues);
         }
     }
 
@@ -131,7 +150,8 @@ public class SubtitleManager implements TextOutput, OnDataChange {
     private void configureSubtitleView() {
         if (mSubtitleView != null) {
             // disable default style
-            mSubtitleView.setApplyEmbeddedStyles(false);
+            // MOD: dual subtitles use a size span for the original line
+            mSubtitleView.setApplyEmbeddedStyles(mExtraCues != null);
 
             SubtitleStyle subtitleStyle = getSubtitleStyle();
 

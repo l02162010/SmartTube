@@ -6,6 +6,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionCatego
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.UiOptionItem;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
+import com.liskovsoft.smartyoutubetv2.common.dualsub.DualSubSettings;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.AppDialogUtil;
 import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
@@ -32,6 +33,7 @@ public class SubtitleSettingsPresenter extends BasePresenter<Void> {
         appendSubtitleStyleCategory(settingsPresenter);
         appendSubtitleSizeCategory(settingsPresenter);
         appendSubtitlePositionCategory(settingsPresenter);
+        DualSubSettings.append(getContext(), settingsPresenter); // MOD: dual subtitles
 
         settingsPresenter.showDialog(getContext().getString(R.string.subtitle_category_title));
     }
