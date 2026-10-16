@@ -43,7 +43,8 @@ object DualSubSettings {
             })
 
         val keyState = data.maskedApiKey.ifEmpty { context.getString(R.string.dualsub_api_key_not_set) }
-        settingsPresenter.appendSingleButton(UiOptionItem.from(context.getString(R.string.dualsub_api_key), keyState) {
+        // Single buttons don't render a description, so the masked key goes into the title
+        settingsPresenter.appendSingleButton(UiOptionItem.from("${context.getString(R.string.dualsub_api_key)}: $keyState") {
             settingsPresenter.closeDialog()
             // Tip: type with the Google TV phone remote keyboard, or `adb shell input text '<key>'`
             SimpleEditDialog.showPassword(context, context.getString(R.string.dualsub_api_key), null) { newValue ->
