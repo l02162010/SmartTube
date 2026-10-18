@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 /** Retrying won't help: bad API key (401/403), unknown model, malformed request... */
@@ -49,7 +50,7 @@ class ClaudeTranslator(
             "en" -> "English"
             "ja" -> "Japanese"
             "ko" -> "Korean"
-            else -> code
+            else -> Locale.forLanguageTag(code).getDisplayLanguage(Locale.ENGLISH).ifEmpty { code }
         }
     }
 
