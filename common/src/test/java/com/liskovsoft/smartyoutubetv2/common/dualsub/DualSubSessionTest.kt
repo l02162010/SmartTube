@@ -106,7 +106,7 @@ class DualSubSessionTest {
         val cache = TranslationCache(tmp.root)
         val name = "resume.json"
 
-        // First visit: batches touching line 60+ fail (e.g. overloaded API): [50,90) and [90,100) stay empty
+        // First visit: batches touching line 60+ keep failing (API down): retried a few times, then [60,85) and [85,100) stay empty
         val failing = FakeClaude { _, lines -> if (lines.any { it.removePrefix("line").toInt() >= 60 }) HttpResult(500, "{}") else null }
             .apply { subtitleBody = manualJson(100) }
         val first = Waiter()
@@ -116,7 +116,7 @@ class DualSubSessionTest {
                 override fun onFinished(stats: String) = finished.countDown()
             }).start(0)
         assertTrue(finished.await(10, TimeUnit.SECONDS))
-        assertEquals(50, cache.read(name)!!.translations.count { it != null })
+        assertEquals(60, cache.read(name)!!.translations.count { it != null })
 
         // Second visit: only the missing lines are requested
         val http = FakeClaude()
@@ -125,9 +125,26 @@ class DualSubSessionTest {
         session.start(0)
         awaitTrue { session.isReady && (0 until 100).all { session.translation(it) != null } }
 
-        assertTrue(http.requests.flatten().all { it.removePrefix("line").toInt() >= 50 })
-        assertEquals(50, http.requests.flatten().size)
+        assertTrue(http.requests.flatten().all { it.removePrefix("line").toInt() >= 60 })
+        assertEquals(40, http.requests.flatten().size)
         assertEquals("line10-tr", session.translation(10))
+    }
+
+    @Test
+    fun failedBatchIsRetriedInsteadOfLeftEmpty() {
+        // The API is down for a while: the batch at line 30 fails past the translator's own retries twice
+        var failures = 0
+        val http = FakeClaude { _, lines -> if (lines[0] == "line30" && failures++ < 2 * (ClaudeTranslator.MAX_RETRIES + 1)) HttpResult(529, "{}") else null }
+            .apply { subtitleBody = manualJson(100) }
+        val listener = Waiter()
+        val session = DualSubSession(track, http, ClaudeTranslator(http, "k", ClaudeTranslator.MODEL_HAIKU, "zh-Hant") {}, null, null, listener)
+
+        session.start(30_000)
+
+        awaitTrue { session.isReady && (30 until 100).all { session.translation(it) != null } }
+        assertEquals("line30-tr", session.translation(30))
+        assertEquals(1, listener.errors.size) // reported once, not per failure
+        session.cancel()
     }
 
     @Test

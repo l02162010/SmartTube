@@ -37,7 +37,7 @@ class ClaudeTranslator(
          * Bump it when the prompt or the sentence splitting (Json3Parser) changes:
          * the cache file name contains it, so old cues and translations expire.
          */
-        const val PROMPT_VERSION = 4
+        const val PROMPT_VERSION = 5
         const val MAX_RETRIES = 4
         const val CONTEXT_LINES = 6
         private const val MAX_TOKENS = 8192
@@ -64,6 +64,7 @@ class ClaudeTranslator(
         Rules:
         - Reply with ONLY a JSON object that maps every id of "lines" to its translation: {"1": "...", "2": "...", ...}. Same ids, nothing else.
         - The translation under an id must render exactly the text of that id. Never merge, split, drop or move lines, even if a sentence spans several ids.
+        - Each line is shown on screen together with its own original text. When a sentence runs over several ids, cut your translation at the same point as the original, so every id carries the meaning of its own words, even if the word order gets a little less natural. Never leave an id empty or move words into a neighbouring id.
         - Keep names, terms and the way people address each other consistent across lines.
         - Write natural, concise subtitles. Keep the meaning; do not add explanations, notes or quotes around the text.
         - If a line is only a sound tag such as [Music] or (Laughter), translate the tag.
@@ -207,6 +208,10 @@ class ClaudeTranslator(
             val value = obj.get(id.toString())
             if (value == null || !value.isJsonPrimitive) {
                 throw BadOutputException("Missing line $id")
+            }
+            // Source lines are never blank: an empty one means its words were merged into a neighbour
+            if (value.asString.isBlank()) {
+                throw BadOutputException("Empty line $id")
             }
             value.asString.trim()
         }

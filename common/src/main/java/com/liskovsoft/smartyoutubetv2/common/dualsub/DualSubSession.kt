@@ -4,6 +4,7 @@ import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReferenceArray
 
 /**
@@ -26,7 +27,8 @@ class DualSubSession(
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) }
 ) {
     companion object {
-        const val BATCH_SIZE = 40
+        /** Smaller batches come back sooner and the model keeps lines aligned better than in long ones */
+        const val BATCH_SIZE = 25
         /** The batch at the playback position is small so its translation shows up within a couple of seconds */
         const val QUICK_BATCH_SIZE = 10
         const val WORKERS = 4
@@ -37,6 +39,12 @@ class DualSubSession(
          */
         const val LOOKAHEAD_MS = 5 * 60_000L
         private const val IDLE_WAIT_MS = 1_000L
+        /**
+         * A batch that still fails after the translator's own retries goes back to the queue, so an API hiccup
+         * doesn't leave minutes of video untranslated. After this many failures in a row the API is treated as
+         * down for this video: failed lines stay empty until it is opened again.
+         */
+        const val MAX_FAILURES_IN_A_ROW = 6
 
         @JvmStatic
         fun toJson3Url(url: String): String {
@@ -70,6 +78,7 @@ class DualSubSession(
     private val pending = ArrayList<Batch>()
     private var inFlight = 0
     private val hadErrors = AtomicBoolean(false)
+    private val failuresInARow = AtomicInteger()
     private val savedComplete = AtomicBoolean(false)
     /** New translations not written to the cache yet */
     private val dirty = AtomicBoolean(false)
@@ -245,6 +254,7 @@ class DualSubSession(
             try {
                 val result = translator.translateWithSplit(lines, context)
                 result.forEachIndexed { i, text -> translations.set(batch.from + i, text) }
+                failuresInARow.set(0)
                 dirty.set(true)
                 listener.onTranslated()
             } catch (e: FatalApiException) {
@@ -254,7 +264,11 @@ class DualSubSession(
                 }
                 return
             } catch (e: TransientException) {
-                // Lines of this batch stay untranslated (retried next time the video opens), other batches go on
+                // Try the batch again when it is due; once the API looks down, its lines stay empty for this visit
+                // (retried next time the video opens). Other batches go on either way.
+                if (failuresInARow.incrementAndGet() < MAX_FAILURES_IN_A_ROW) {
+                    synchronized(pending) { pending.add(batch) }
+                }
                 if (hadErrors.compareAndSet(false, true)) {
                     listener.onError(e, false)
                 }

@@ -128,6 +128,19 @@ class ClaudeTranslatorTest {
     }
 
     @Test
+    fun emptyLineMeansWordsMovedToANeighbour() {
+        // Right ids and count, but line 1 was folded into line 2 (a sentence spanning both)
+        val translator = translator(FakeClaude())
+
+        try {
+            translator.parseLines("""{"1": "", "2": "我昨天去了那家店"}""", 2)
+            fail()
+        } catch (e: BadOutputException) {
+            assertTrue(e.message!!.contains("Empty line 1"))
+        }
+    }
+
+    @Test
     fun simplifiedChineseIsRejectedForTraditionalTarget() {
         val translator = translator(FakeClaude())
 
